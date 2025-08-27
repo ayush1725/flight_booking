@@ -256,6 +256,7 @@ export class MemStorage implements IStorage {
       id,
       bookingReference,
       seatNumber,
+      status: insertBooking.status || "confirmed",
       createdAt: new Date(),
     };
     
@@ -302,4 +303,7 @@ export class MemStorage implements IStorage {
   }
 }
 
-export const storage = new MemStorage();
+import { DBStorage } from "./dbStorage";
+
+// Use database storage if DATABASE_URL is available, otherwise use in-memory storage
+export const storage = process.env.DATABASE_URL ? new DBStorage() : new MemStorage();
