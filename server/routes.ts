@@ -8,6 +8,7 @@ import { validateQuery, validateRequest } from "./middleware/validation";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 import { authenticateToken, requireOwnership } from "./middleware/authMiddleware";
 import authRoutes from "./routes/authRoutes";
+import testOtpRoutes from "./routes/testOtpRoutes";
 import { flightSearchSchema, insertBookingSchema } from "@shared/schema";
 import { logger } from "./utils/logger";
 
@@ -51,6 +52,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Authentication routes
   app.use("/api/auth", authRoutes);
+
+  // Test OTP routes (for development and testing)
+  app.use("/api/test", testOtpRoutes);
 
   // Flight routes
   app.get(

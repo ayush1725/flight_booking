@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabase';
 import { logger } from '../utils/logger';
+import { OTPService } from './otpService';
 import jwt from 'jsonwebtoken';
 
 export interface AuthUser {
@@ -114,7 +115,7 @@ export class AuthService {
   }
 
   /**
-   * Send OTP to phone number
+   * Send OTP to phone number using custom SMS service
    */
   static async sendPhoneOTP(phoneNumber: string): Promise<AuthResponse> {
     try {
@@ -127,28 +128,22 @@ export class AuthService {
         };
       }
 
-      const { data, error } = await supabase.auth.signInWithOtp({
-        phone: phoneNumber,
-        options: {
-          shouldCreateUser: true // Creates user if doesn't exist
-        }
-      });
-
-      if (error) {
-        logger.error('Phone OTP send failed:', error);
+      // Use our custom OTP service
+      const result = await OTPService.sendOTP(phoneNumber);
+      
+      if (!result.success) {
         return {
           success: false,
-          error: error.message
+          error: result.error || 'Failed to send OTP'
         };
       }
 
-      logger.info(`OTP sent to phone: ${phoneNumber.replace(/\d(?=\d{4})/g, '*')}`);
       return {
         success: true,
-        message: 'OTP sent successfully',
+        message: result.message || 'OTP sent successfully',
         data: {
           phone: phoneNumber,
-          message_id: data?.messageId || null
+          expires_in: '5 minutes'
         }
       };
     } catch (error) {
@@ -165,47 +160,107 @@ export class AuthService {
    */
   static async verifyPhoneOTP(phoneNumber: string, otp: string): Promise<AuthResponse> {
     try {
-      const { data, error } = await supabase.auth.verifyOtp({
-        phone: phoneNumber,
-        token: otp,
-        type: 'sms'
-      });
-
-      if (error) {
-        logger.error('Phone OTP verification failed:', error);
-        return {
-          success: false,
-          error: error.message
-        };
-      }
-
-      if (!data.user || !data.session) {
-        return {
-          success: false,
-          error: 'Invalid OTP or verification failed'
-        };
-      }
-
-      logger.info(`User authenticated via phone OTP: ${phoneNumber.replace(/\d(?=\d{4})/g, '*')}`);
+      // First verify the OTP with our custom service
+      const otpResult = await OTPService.verifyOTP(phoneNumber, otp);
       
-      return {
-        success: true,
-        data: {
-          user: {
-            id: data.user.id,
-            email: data.user.email,
-            phone: data.user.phone,
-            user_metadata: data.user.user_metadata,
-            app_metadata: data.user.app_metadata
-          },
-          session: {
-            access_token: data.session.access_token,
-            refresh_token: data.session.refresh_token,
-            expires_at: data.session.expires_at,
-            token_type: data.session.token_type
+      if (!otpResult.success) {
+        return {
+          success: false,
+          error: otpResult.error || 'Invalid OTP'
+        };
+      }
+
+      // OTP is valid, now create or sign in user with Supabase
+      // Since we can't directly create a session without email/password,
+      // we'll use a custom JWT approach or create a user in our database
+      
+      try {
+        // Try to create user with phone number as unique identifier
+        const { data, error } = await supabase.auth.signUp({
+          email: `${phoneNumber.replace(/\+/g, '')}@phone-auth.temp`,
+          password: `temp_${Date.now()}_${Math.random()}`,
+          options: {
+            data: {
+              phone: phoneNumber,
+              auth_method: 'phone_otp'
+            }
           }
+        });
+
+        if (error && !error.message.includes('User already registered')) {
+          logger.error('User creation failed:', error);
+          // Fallback: try to sign in
         }
-      };
+
+        // Clear the OTP after successful verification
+        OTPService.clearOTP(phoneNumber);
+
+        // Create a custom session token
+        const payload = {
+          phone: phoneNumber,
+          verified_at: new Date().toISOString(),
+          auth_method: 'phone_otp'
+        };
+        
+        const customToken = jwt.sign(payload, process.env.JWT_SECRET || 'default-secret', { 
+          expiresIn: '24h' 
+        });
+
+        logger.info(`User authenticated via phone OTP: ${phoneNumber.replace(/\d(?=\d{4})/g, '*')}`);
+        
+        return {
+          success: true,
+          data: {
+            user: {
+              id: data?.user?.id || `phone_${phoneNumber.replace(/\+/g, '')}`,
+              phone: phoneNumber,
+              email: data?.user?.email,
+              user_metadata: { auth_method: 'phone_otp' },
+              app_metadata: {}
+            },
+            session: {
+              access_token: customToken,
+              refresh_token: `refresh_${customToken}`,
+              expires_at: Math.floor(Date.now() / 1000) + 24 * 60 * 60, // 24 hours
+              token_type: 'Bearer'
+            }
+          }
+        };
+      } catch (supabaseError: any) {
+        logger.warn('Supabase auth failed, using custom auth:', supabaseError.message);
+        
+        // Clear the OTP after successful verification
+        OTPService.clearOTP(phoneNumber);
+
+        // Create a custom session token
+        const payload = {
+          phone: phoneNumber,
+          verified_at: new Date().toISOString(),
+          auth_method: 'phone_otp'
+        };
+        
+        const customToken = jwt.sign(payload, process.env.JWT_SECRET || 'default-secret', { 
+          expiresIn: '24h' 
+        });
+
+        return {
+          success: true,
+          data: {
+            user: {
+              id: `phone_${phoneNumber.replace(/\+/g, '')}`,
+              phone: phoneNumber,
+              user_metadata: { auth_method: 'phone_otp' },
+              app_metadata: {}
+            },
+            session: {
+              access_token: customToken,
+              refresh_token: `refresh_${customToken}`,
+              expires_at: Math.floor(Date.now() / 1000) + 24 * 60 * 60,
+              token_type: 'Bearer'
+            }
+          }
+        };
+      }
     } catch (error) {
       logger.error('Phone OTP verification error:', error);
       return {
