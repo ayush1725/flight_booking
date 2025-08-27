@@ -20,6 +20,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     allowedHeaders: ["Content-Type", "Authorization"]
   }));
 
+  // Root endpoint - API welcome message
+  app.get("/", (req, res) => {
+    res.json({
+      success: true,
+      message: "✈️ Flight Booking API",
+      version: "1.0.0",
+      timestamp: new Date().toISOString(),
+      documentation: "/api",
+      health_check: "/api/health",
+      endpoints: {
+        flights: "/api/flights",
+        bookings: "/api/bookings", 
+        users: "/api/users",
+        auth: "/api/auth"
+      }
+    });
+  });
+
   // Health check endpoint
   app.get("/api/health", (req, res) => {
     logger.info("Health check requested");
