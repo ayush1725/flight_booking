@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, decimal, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer, decimal, uuid, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -38,7 +38,10 @@ export const bookings = pgTable("bookings", {
   passportNumber: varchar("passport_number", { length: 20 }).notNull(),
   seatNumber: varchar("seat_number", { length: 10 }),
   totalPrice: decimal("total_price", { precision: 10, scale: 2 }).notNull(),
-  status: varchar("status", { length: 20 }).default("confirmed").notNull(),
+  status: varchar("status", { length: 20 }).default("pending").notNull(),
+  paymentIntentId: varchar("payment_intent_id", { length: 255 }),
+  paymentStatus: varchar("payment_status", { length: 20 }).default("pending").notNull(),
+  eTicketGenerated: boolean("e_ticket_generated").default(false).notNull(),
   createdAt: timestamp("created_at").default(sql`now()`).notNull(),
 });
 

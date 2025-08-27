@@ -12,12 +12,14 @@ export interface IStorage {
   getFlightById(id: string): Promise<Flight | undefined>;
   createFlight(flight: InsertFlight): Promise<Flight>;
   updateFlightSeats(flightId: string, seatsBooked: number): Promise<void>;
+  updateFlight(flightId: string, updates: Partial<Flight>): Promise<void>;
 
   // Booking operations
   createBooking(booking: InsertBooking): Promise<Booking>;
   getBookingById(id: string): Promise<Booking | undefined>;
   getBookingsByUserId(userId: string): Promise<Booking[]>;
   getUserBookingHistory(userId: string): Promise<(Booking & { flight: Flight })[]>;
+  updateBooking(bookingId: string, updates: Partial<Booking>): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -245,6 +247,14 @@ export class MemStorage implements IStorage {
       this.flights.set(flightId, flight);
     }
   }
+  
+  async updateFlight(flightId: string, updates: Partial<Flight>): Promise<void> {
+    const flight = this.flights.get(flightId);
+    if (flight) {
+      const updatedFlight = { ...flight, ...updates };
+      this.flights.set(flightId, updatedFlight);
+    }
+  }
 
   async createBooking(insertBooking: InsertBooking): Promise<Booking> {
     const id = randomUUID();
@@ -256,14 +266,17 @@ export class MemStorage implements IStorage {
       id,
       bookingReference,
       seatNumber,
-      status: insertBooking.status || "confirmed",
+      status: insertBooking.status || "pending",
+      paymentIntentId: insertBooking.paymentIntentId || null,
+      paymentStatus: insertBooking.paymentStatus || "pending",
+      eTicketGenerated: insertBooking.eTicketGenerated || false,
       createdAt: new Date(),
     };
     
     this.bookings.set(id, booking);
     
-    // Update flight seats
-    await this.updateFlightSeats(insertBooking.flightId, 1);
+    // Don't update flight seats automatically in payment flow
+    // Only update when payment is confirmed
     
     return booking;
   }
@@ -286,6 +299,14 @@ export class MemStorage implements IStorage {
     );
     
     return bookingsWithFlights.filter(booking => booking.flight);
+  }
+  
+  async updateBooking(bookingId: string, updates: Partial<Booking>): Promise<void> {
+    const booking = this.bookings.get(bookingId);
+    if (booking) {
+      const updatedBooking = { ...booking, ...updates };
+      this.bookings.set(bookingId, updatedBooking);
+    }
   }
 
   private generateBookingReference(): string {

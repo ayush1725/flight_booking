@@ -75,6 +75,13 @@ export class DBStorage implements IStorage {
       })
       .where(eq(flights.id, flightId));
   }
+  
+  async updateFlight(flightId: string, updates: Partial<Flight>): Promise<void> {
+    await getDB()
+      .update(flights)
+      .set(updates)
+      .where(eq(flights.id, flightId));
+  }
 
   async createBooking(insertBooking: InsertBooking): Promise<Booking> {
     const bookingReference = this.generateBookingReference();
@@ -116,6 +123,13 @@ export class DBStorage implements IStorage {
       ...row.bookings,
       flight: row.flights
     }));
+  }
+  
+  async updateBooking(bookingId: string, updates: Partial<Booking>): Promise<void> {
+    await getDB()
+      .update(bookings)
+      .set(updates)
+      .where(eq(bookings.id, bookingId));
   }
 
   private generateBookingReference(): string {

@@ -74,6 +74,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     validateRequest(insertBookingSchema),
     BookingController.createBooking
   );
+  
+  // Payment routes
+  app.post(
+    "/api/bookings/payment-intent",
+    BookingController.createPaymentIntent
+  );
+  
+  app.post(
+    "/api/bookings/confirm-payment",
+    BookingController.confirmPayment
+  );
+  
+  // E-ticket download
+  app.get(
+    "/api/bookings/:bookingId/eticket",
+    BookingController.downloadETicket
+  );
+  
+  // User bookings
+  app.get(
+    "/api/users/:userId/bookings",
+    BookingController.getUserBookings
+  );
 
   app.get(
     "/api/bookings/:id",
