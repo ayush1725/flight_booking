@@ -5,24 +5,34 @@ import { eq, and, gte, lte, like, sql } from "drizzle-orm";
 import type { User, InsertUser, Flight, InsertFlight, Booking, InsertBooking, FlightSearch } from "@shared/schema";
 import { IStorage } from "./storage";
 
-// Initialize database connection
-const connectionString = process.env.DATABASE_URL!;
-const client = neon(connectionString);
-const db = drizzle(client);
+// Lazy initialization of database connection
+let db: ReturnType<typeof drizzle> | null = null;
+
+function getDB() {
+  if (!db) {
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+      throw new Error("No database connection string was provided. DATABASE_URL environment variable is required.");
+    }
+    const client = neon(connectionString);
+    db = drizzle(client);
+  }
+  return db;
+}
 
 export class DBStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    const result = await getDB().select().from(users).where(eq(users.id, id)).limit(1);
     return result[0];
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    const result = await getDB().select().from(users).where(eq(users.email, email)).limit(1);
     return result[0];
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const result = await db.insert(users).values(insertUser).returning();
+    const result = await getDB().insert(users).values(insertUser).returning();
     return result[0];
   }
 
@@ -31,7 +41,7 @@ export class DBStorage implements IStorage {
     const nextDay = new Date(searchDate);
     nextDay.setDate(searchDate.getDate() + 1);
 
-    const result = await db
+    const result = await getDB()
       .select()
       .from(flights)
       .where(
@@ -48,17 +58,17 @@ export class DBStorage implements IStorage {
   }
 
   async getFlightById(id: string): Promise<Flight | undefined> {
-    const result = await db.select().from(flights).where(eq(flights.id, id)).limit(1);
+    const result = await getDB().select().from(flights).where(eq(flights.id, id)).limit(1);
     return result[0];
   }
 
   async createFlight(insertFlight: InsertFlight): Promise<Flight> {
-    const result = await db.insert(flights).values(insertFlight).returning();
+    const result = await getDB().insert(flights).values(insertFlight).returning();
     return result[0];
   }
 
   async updateFlightSeats(flightId: string, seatsBooked: number): Promise<void> {
-    await db
+    await getDB()
       .update(flights)
       .set({ 
         seatsAvailable: sql`${flights.seatsAvailable} - ${seatsBooked}`
@@ -77,7 +87,7 @@ export class DBStorage implements IStorage {
       status: insertBooking.status || "confirmed"
     };
 
-    const result = await db.insert(bookings).values(bookingData).returning();
+    const result = await getDB().insert(bookings).values(bookingData).returning();
     
     // Update flight seats
     await this.updateFlightSeats(insertBooking.flightId, 1);
@@ -86,17 +96,17 @@ export class DBStorage implements IStorage {
   }
 
   async getBookingById(id: string): Promise<Booking | undefined> {
-    const result = await db.select().from(bookings).where(eq(bookings.id, id)).limit(1);
+    const result = await getDB().select().from(bookings).where(eq(bookings.id, id)).limit(1);
     return result[0];
   }
 
   async getBookingsByUserId(userId: string): Promise<Booking[]> {
-    const result = await db.select().from(bookings).where(eq(bookings.userId, userId));
+    const result = await getDB().select().from(bookings).where(eq(bookings.userId, userId));
     return result;
   }
 
   async getUserBookingHistory(userId: string): Promise<(Booking & { flight: Flight })[]> {
-    const result = await db
+    const result = await getDB()
       .select()
       .from(bookings)
       .innerJoin(flights, eq(bookings.flightId, flights.id))
