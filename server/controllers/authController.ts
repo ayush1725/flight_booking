@@ -13,6 +13,36 @@ const phoneOtpVerifySchema = z.object({
   otp: z.string().length(6, 'OTP must be 6 digits').regex(/^\d{6}$/, 'OTP must contain only digits')
 });
 
+const emailRegisterSchema = z.object({
+  email: z.string().email('Invalid email format'),
+  password: z.string().min(6, 'Password must be at least 6 characters long'),
+  fullName: z.string().min(1, 'Full name is required').max(255, 'Full name too long')
+});
+
+const emailVerifySchema = z.object({
+  email: z.string().email('Invalid email format'),
+  code: z.string().length(6, 'Verification code must be 6 digits').regex(/^\d{6}$/, 'Verification code must contain only digits')
+});
+
+const emailLoginSchema = z.object({
+  email: z.string().email('Invalid email format'),
+  password: z.string().min(1, 'Password is required')
+});
+
+const emailResendSchema = z.object({
+  email: z.string().email('Invalid email format')
+});
+
+const passwordResetRequestSchema = z.object({
+  email: z.string().email('Invalid email format')
+});
+
+const passwordResetSchema = z.object({
+  email: z.string().email('Invalid email format'),
+  code: z.string().length(6, 'Reset code must be 6 digits').regex(/^\d{6}$/, 'Reset code must contain only digits'),
+  newPassword: z.string().min(6, 'Password must be at least 6 characters long')
+});
+
 const refreshTokenSchema = z.object({
   refresh_token: z.string().min(1, 'Refresh token is required')
 });
@@ -345,6 +375,266 @@ export class AuthController {
       res.status(500).json({
         success: false,
         message: 'Internal server error'
+      });
+    }
+  }
+
+  // EMAIL AUTHENTICATION METHODS
+
+  /**
+   * Register new user with email and password
+   * POST /auth/email/register
+   */
+  static async registerWithEmail(req: Request, res: Response) {
+    try {
+      const validatedData = emailRegisterSchema.parse(req.body);
+      
+      const result = await AuthService.registerWithEmail(
+        validatedData.email,
+        validatedData.password,
+        validatedData.fullName
+      );
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: 'Registration failed',
+          error: result.error
+        });
+      }
+
+      logger.info(`User registration successful: ${validatedData.email.replace(/(.{2})(.*)(@.*)/, '$1***$3')}`);
+      
+      res.status(201).json({
+        success: true,
+        message: result.message,
+        data: result.data
+      });
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: error.errors
+        });
+      }
+      logger.error('Email registration error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error',
+        error: 'REGISTRATION_SERVICE_ERROR'
+      });
+    }
+  }
+
+  /**
+   * Verify email with verification code
+   * POST /auth/email/verify
+   */
+  static async verifyEmail(req: Request, res: Response) {
+    try {
+      const validatedData = emailVerifySchema.parse(req.body);
+      
+      const result = await AuthService.verifyEmail(
+        validatedData.email,
+        validatedData.code
+      );
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: 'Verification failed',
+          error: result.error
+        });
+      }
+
+      logger.info(`Email verification successful: ${validatedData.email.replace(/(.{2})(.*)(@.*)/, '$1***$3')}`);
+      
+      res.json({
+        success: true,
+        message: result.message,
+        data: result.data
+      });
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: error.errors
+        });
+      }
+      logger.error('Email verification error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error',
+        error: 'VERIFICATION_SERVICE_ERROR'
+      });
+    }
+  }
+
+  /**
+   * Login with email and password
+   * POST /auth/email/login
+   */
+  static async loginWithEmail(req: Request, res: Response) {
+    try {
+      const validatedData = emailLoginSchema.parse(req.body);
+      
+      const result = await AuthService.loginWithEmail(
+        validatedData.email,
+        validatedData.password
+      );
+
+      if (!result.success) {
+        return res.status(401).json({
+          success: false,
+          message: 'Login failed',
+          error: result.error,
+          data: result.data // May contain emailNotVerified flag
+        });
+      }
+
+      logger.info(`Email login successful: ${validatedData.email.replace(/(.{2})(.*)(@.*)/, '$1***$3')}`);
+      
+      res.json({
+        success: true,
+        message: result.message,
+        data: result.data
+      });
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: error.errors
+        });
+      }
+      logger.error('Email login error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error',
+        error: 'LOGIN_SERVICE_ERROR'
+      });
+    }
+  }
+
+  /**
+   * Resend email verification code
+   * POST /auth/email/resend-verification
+   */
+  static async resendEmailVerification(req: Request, res: Response) {
+    try {
+      const validatedData = emailResendSchema.parse(req.body);
+      
+      const result = await AuthService.resendEmailVerification(validatedData.email);
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: 'Failed to resend verification',
+          error: result.error
+        });
+      }
+
+      logger.info(`Verification code resent: ${validatedData.email.replace(/(.{2})(.*)(@.*)/, '$1***$3')}`);
+      
+      res.json({
+        success: true,
+        message: result.message
+      });
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: error.errors
+        });
+      }
+      logger.error('Resend verification error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error',
+        error: 'RESEND_SERVICE_ERROR'
+      });
+    }
+  }
+
+  /**
+   * Request password reset
+   * POST /auth/email/forgot-password
+   */
+  static async requestPasswordReset(req: Request, res: Response) {
+    try {
+      const validatedData = passwordResetRequestSchema.parse(req.body);
+      
+      const result = await AuthService.requestPasswordReset(validatedData.email);
+
+      // Always return success for security (don't reveal if email exists)
+      logger.info(`Password reset requested: ${validatedData.email.replace(/(.{2})(.*)(@.*)/, '$1***$3')}`);
+      
+      res.json({
+        success: true,
+        message: result.message
+      });
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: error.errors
+        });
+      }
+      logger.error('Password reset request error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error',
+        error: 'PASSWORD_RESET_SERVICE_ERROR'
+      });
+    }
+  }
+
+  /**
+   * Reset password with code
+   * POST /auth/email/reset-password
+   */
+  static async resetPassword(req: Request, res: Response) {
+    try {
+      const validatedData = passwordResetSchema.parse(req.body);
+      
+      const result = await AuthService.resetPassword(
+        validatedData.email,
+        validatedData.code,
+        validatedData.newPassword
+      );
+
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: 'Password reset failed',
+          error: result.error
+        });
+      }
+
+      logger.info(`Password reset successful: ${validatedData.email.replace(/(.{2})(.*)(@.*)/, '$1***$3')}`);
+      
+      res.json({
+        success: true,
+        message: result.message,
+        data: result.data
+      });
+    } catch (error: any) {
+      if (error.name === 'ZodError') {
+        return res.status(400).json({
+          success: false,
+          message: 'Validation failed',
+          errors: error.errors
+        });
+      }
+      logger.error('Password reset error:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Internal server error',
+        error: 'PASSWORD_RESET_SERVICE_ERROR'
       });
     }
   }

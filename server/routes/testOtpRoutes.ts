@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { OTPService } from '../services/otpService';
+import { EmailVerificationService } from '../services/emailVerificationService';
 import { logger } from '../utils/logger';
 import { z } from 'zod';
 
@@ -141,6 +142,38 @@ router.get('/otp-status/:phone', (req: Request, res: Response) => {
     });
   } catch (error) {
     logger.error('Test OTP status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+/**
+ * Test endpoint to check email verification status (development only)
+ * GET /api/test/email-status/:email
+ */
+router.get('/email-status/:email', (req: Request, res: Response) => {
+  if (process.env.NODE_ENV !== 'development') {
+    return res.status(403).json({
+      success: false,
+      message: 'This endpoint is only available in development mode'
+    });
+  }
+
+  try {
+    const email = req.params.email;
+    const status = EmailVerificationService.getVerificationStatus(email);
+    const stats = EmailVerificationService.getStats();
+
+    res.json({
+      success: true,
+      email_status: status,
+      system_stats: stats,
+      note: 'This endpoint is for development/debugging only'
+    });
+  } catch (error) {
+    logger.error('Test email status error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error'
