@@ -6,6 +6,8 @@ import { BookingController } from "./controllers/bookingController";
 import { UserController } from "./controllers/userController";
 import { validateQuery, validateRequest } from "./middleware/validation";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
+import { authenticateToken, requireOwnership } from "./middleware/authMiddleware";
+import authRoutes from "./routes/authRoutes";
 import { flightSearchSchema, insertBookingSchema } from "@shared/schema";
 import { logger } from "./utils/logger";
 
@@ -28,6 +30,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       version: "1.0.0"
     });
   });
+
+  // Authentication routes
+  app.use("/api/auth", authRoutes);
 
   // Flight routes
   app.get(
@@ -53,14 +58,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     BookingController.getBookingById
   );
 
-  // User routes
+  // User routes (protected - users can only access their own data)
   app.get(
     "/api/users/:id",
+    authenticateToken,
+    requireOwnership(),
     UserController.getUserProfile
   );
 
   app.get(
     "/api/users/:id/bookings",
+    authenticateToken,
+    requireOwnership(),
     UserController.getUserBookings
   );
 
